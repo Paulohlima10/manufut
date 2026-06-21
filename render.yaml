@@ -4,14 +4,14 @@
 # Se criar o serviço manualmente (sem Blueprint), use:
 #   Root Directory: (vazio)
 #   Build Command: pip install -r requirements.txt
-#   Start Command: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+#   Start Command: cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
 services:
   - type: web
     name: manufut-api
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
