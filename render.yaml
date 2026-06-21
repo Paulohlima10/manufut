@@ -1,21 +1,12 @@
-# Deploy do backend: Render → New → Blueprint → conecte este repositório.
-# Depois copie a URL pública (ex.: https://manufut-api.onrender.com) para VITE_API_URL no frontend.
-#
-# Se criar o serviço manualmente (sem Blueprint), use:
-#   Root Directory: (vazio)
-#   Build Command: pip install -r requirements.txt
-#   Start Command: cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+# Deploy: Render → Blueprint (recomendado) ou serviço Docker manual.
+# Frontend: defina VITE_API_URL=https://manufut-api.onrender.com e redeploy.
 services:
   - type: web
     name: manufut-api
-    runtime: python
+    runtime: docker
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.11"
       - key: ALLOWED_ORIGINS
         value: https://manufut.onrender.com,https://manufut.vercel.app
       - key: DEV_AUTH
