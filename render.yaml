@@ -12,7 +12,7 @@ services:
       - key: PYTHON_VERSION
         value: "3.11"
       - key: ALLOWED_ORIGINS
-        value: https://manufut.vercel.app
+        value: https://manufut.onrender.com,https://manufut.vercel.app
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
