@@ -1,4 +1,9 @@
+from pathlib import Path
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ROOT_DIR = Path(__file__).resolve().parents[2]  # project root (.env)
 
 
 class Settings(BaseSettings):
@@ -9,9 +14,15 @@ class Settings(BaseSettings):
     max_force: float = 1.0
     supabase_url: str = ""
     supabase_service_role_key: str = ""
-    dev_auth: bool = True
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    room_store_path: Path = ROOT_DIR / ".data" / "rooms.json"
+    dev_auth: bool = False
+    model_config = SettingsConfigDict(env_file=ROOT_DIR / ".env", extra="ignore")
+
+    @field_validator("room_store_path", mode="before")
+    @classmethod
+    def resolve_room_store_path(cls, value: str | Path) -> Path:
+        path = Path(value)
+        return path if path.is_absolute() else ROOT_DIR / path
 
 
 settings = Settings()
-

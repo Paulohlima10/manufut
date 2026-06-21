@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/gamefield.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts"],"version":"6.0.3"}
+{"root":["./src/app.tsx","./src/gamefield.tsx","./src/api.ts","./src/main.tsx","./src/physics.ts","./src/sounds.ts","./src/types.ts","./src/vite-env.d.ts"],"version":"6.0.3"}

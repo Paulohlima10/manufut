@@ -39,6 +39,7 @@ class Participant:
     team_name: str = "Meu Time"
     primary: str = "#6d28d9"
     secondary: str = "#fbbf24"
+    player_photos: list[str] = field(default_factory=list)
     ready: bool = False
     connected: bool = True
     last_seen: float = field(default_factory=time)
@@ -55,6 +56,7 @@ class MatchState:
     started_at: float = field(default_factory=time)
     turn_deadline: float = 0
     winner_id: str | None = None
+    last_move: dict[str, Any] | None = None
 
 
 @dataclass
@@ -74,4 +76,3 @@ class Room:
         data.pop("processed_commands", None)
         data["status"] = self.status.value
         return data
-
