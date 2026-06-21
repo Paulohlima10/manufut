@@ -1,10 +1,11 @@
-# Deploy: Render → Blueprint (recomendado) ou serviço Docker manual.
+# Deploy: Render → Blueprint (recomendado).
 # Frontend: defina VITE_API_URL=https://manufut-api.onrender.com e redeploy.
 services:
   - type: web
     name: manufut-api
-    runtime: docker
-    rootDir: backend
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python -m gunicorn your_application.wsgi -c gunicorn.conf.py
     healthCheckPath: /health
     envVars:
       - key: ALLOWED_ORIGINS
