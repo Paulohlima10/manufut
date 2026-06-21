@@ -1,0 +1,19 @@
+# Deploy do backend: Render → New → Blueprint → conecte este repositório.
+# Depois copie a URL pública (ex.: https://manufut-api.onrender.com) para VITE_API_URL na Vercel.
+services:
+  - type: web
+    name: manufut-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: ALLOWED_ORIGINS
+        value: https://manufut.vercel.app
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

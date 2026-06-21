@@ -177,6 +177,7 @@ async def _handle_ws_disconnect(room: Room, uid: str, ws: WebSocket) -> None:
     room.participants[uid].connected = False
     if room.status == RoomStatus.PLAYING:
         room.status = RoomStatus.PAUSED
+        room.paused_at = time()
         game.snapshot(room, "disconnect")
     await store.save(room)
     await store.broadcast(room.code, {"type": "state", "room": room.public()})
@@ -191,7 +192,14 @@ async def websocket_endpoint(ws: WebSocket, code: str, token: str):
     await ws.accept()
     await store.connect(room.code, uid, ws)
     room.participants[uid].connected = True
-    if room.status == RoomStatus.PAUSED: room.status = RoomStatus.PLAYING
+    async with store.lock:
+        if room.status == RoomStatus.PAUSED and any(p.connected for p in room.participants.values()):
+            game.resume_from_pause(room)
+        state_changed = False
+        if room.status == RoomStatus.PLAYING and room.match:
+            state_changed = game.expire_turn_if_needed(room)
+    if state_changed:
+        await store.save(room)
     await store.broadcast(room.code, {"type": "state", "room": room.public()})
     background_tasks: set[asyncio.Task] = set()
     try:
@@ -202,39 +210,69 @@ async def websocket_endpoint(ws: WebSocket, code: str, token: str):
                 break
             action = data.get("type")
             try:
-                if room.status == RoomStatus.PLAYING and room.match and game.expire_turn_if_needed(room):
-                    await store.save(room)
-                    await store.broadcast(room.code, {"type": "state", "room": room.public()})
-                if action == "ready":
-                    room.participants[uid].ready = bool(data.get("ready", True))
-                    if len(room.participants) == 2 and all(p.ready for p in room.participants.values()): game.start(room)
-                elif action == "move":
-                    result = game.move(room, uid, data.get("piece_id", ""), data.get("direction", {}), float(data.get("force", 0)), int(data.get("sequence", 0)))
-                    if supabase and not result.get("duplicate"):
-                        move_payload = {
-                            "piece_id": data.get("piece_id", ""),
-                            "direction": data.get("direction", {}),
-                            "force": float(data.get("force", 0)),
-                            "sequence": int(data.get("sequence", 0)),
-                        }
-                        task = asyncio.create_task(_persist_move(room.code, uid, move_payload))
-                        background_tasks.add(task)
-                        task.add_done_callback(background_tasks.discard)
-                elif action == "forfeit":
-                    if uid not in room.participants:
-                        raise GameError("Participante inválido")
-                    game.finish(room, uid)
-                elif action == "rematch":
-                    room.participants[uid].ready = False; room.match = None; room.processed_commands.clear(); room.status = RoomStatus.CONFIGURING
-                elif action == "expire_turn":
+                state_changed = False
+                move_result: dict | None = None
+                async with store.lock:
+                    if room.status == RoomStatus.PLAYING and room.match:
+                        state_changed = game.expire_turn_if_needed(room)
+                    if action == "ready":
+                        room.participants[uid].ready = bool(data.get("ready", True))
+                        if len(room.participants) == 2 and all(p.ready for p in room.participants.values()):
+                            game.start(room)
+                        state_changed = True
+                    elif action == "move":
+                        move_result = game.move(
+                            room,
+                            uid,
+                            data.get("piece_id", ""),
+                            data.get("direction", {}),
+                            float(data.get("force", 0)),
+                            int(data.get("sequence", 0)),
+                        )
+                        state_changed = True
+                    elif action == "forfeit":
+                        if uid not in room.participants:
+                            raise GameError("Participante inválido")
+                        game.finish(room, uid)
+                        state_changed = True
+                    elif action == "rematch":
+                        room.participants[uid].ready = False
+                        room.match = None
+                        room.processed_commands.clear()
+                        room.status = RoomStatus.CONFIGURING
+                        state_changed = True
+                    elif action == "expire_turn":
+                        pass
+                    elif action == "ping":
+                        room.participants[uid].last_seen = time()
+                    else:
+                        raise GameError("Comando desconhecido")
+                if action == "ping":
+                    await ws.send_json({"type": "pong"})
+                    if state_changed:
+                        await store.save(room)
+                        await store.broadcast(room.code, {"type": "state", "room": room.public()})
                     continue
-                elif action == "ping":
-                    room.participants[uid].last_seen = time(); await ws.send_json({"type": "pong"}); continue
-                else: raise GameError("Comando desconhecido")
-                task = asyncio.create_task(store.save(room))
-                background_tasks.add(task)
-                task.add_done_callback(background_tasks.discard)
-                await store.broadcast(room.code, {"type": "state", "room": room.public()})
+                if action == "expire_turn":
+                    if state_changed:
+                        await store.save(room)
+                        await store.broadcast(room.code, {"type": "state", "room": room.public()})
+                    continue
+                if action == "move" and supabase and move_result and not move_result.get("duplicate"):
+                    move_payload = {
+                        "piece_id": data.get("piece_id", ""),
+                        "direction": data.get("direction", {}),
+                        "force": float(data.get("force", 0)),
+                        "sequence": int(data.get("sequence", 0)),
+                    }
+                    task = asyncio.create_task(_persist_move(room.code, uid, move_payload))
+                    background_tasks.add(task)
+                    task.add_done_callback(background_tasks.discard)
+                if state_changed:
+                    task = asyncio.create_task(store.save(room))
+                    background_tasks.add(task)
+                    task.add_done_callback(background_tasks.discard)
+                    await store.broadcast(room.code, {"type": "state", "room": room.public()})
             except (GameError, ValueError) as exc:
                 await ws.send_json({"type": "error", "message": str(exc)})
     except WebSocketDisconnect:

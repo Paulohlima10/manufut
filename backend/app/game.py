@@ -18,6 +18,29 @@ class GameError(ValueError):
 
 
 class GameService:
+    def _other_player(self, room: Room, player_id: str) -> str:
+        ids = list(room.participants)
+        if len(ids) != 2:
+            raise GameError("Partida inválida")
+        return ids[1] if player_id == ids[0] else ids[0]
+
+    def _end_turn(self, room: Room, next_player_id: str) -> None:
+        match = room.match
+        if not match or room.status != RoomStatus.PLAYING:
+            return
+        match.turn_player_id = next_player_id
+        match.turns_left -= 1
+        match.turn_deadline = time() + settings.turn_seconds
+        if match.turns_left <= 0:
+            self.finish(room)
+
+    def resume_from_pause(self, room: Room) -> None:
+        if room.status != RoomStatus.PAUSED or not room.paused_at or not room.match:
+            return
+        room.match.turn_deadline += time() - room.paused_at
+        room.paused_at = None
+        room.status = RoomStatus.PLAYING
+
     def _formation_positions(self, room: Room) -> dict[str, Vec]:
         positions: dict[str, Vec] = {}
         ys = [190.0, 300.0, 410.0]
@@ -38,7 +61,14 @@ class GameService:
             for i in range(3):
                 pieces.append(Piece(f"{player_id}-p{i}", player_id, "line", formation[f"{player_id}-p{i}"]))
             pieces.append(Piece(f"{player_id}-gk", player_id, "goalkeeper", formation[f"{player_id}-gk"], radius=25))
-        room.match = MatchState(pieces, Piece("ball", "", "ball", Vec(500, 300), radius=13), players[0].id, {p.id: 0 for p in players}, turn_deadline=time() + settings.turn_seconds)
+        room.match = MatchState(
+            pieces,
+            Piece("ball", "", "ball", Vec(500, 300), radius=13),
+            players[0].id,
+            {p.id: 0 for p in players},
+            turns_left=settings.match_turns,
+            turn_deadline=time() + settings.turn_seconds,
+        )
         room.status = RoomStatus.PLAYING
         room.processed_commands.clear()
         room.snapshots.clear()
@@ -92,12 +122,8 @@ class GameService:
         if goal:
             match.score[goal] += 1
             self._reset_positions(room)
-        match.turns_left -= 1
-        ids = list(room.participants)
-        match.turn_player_id = ids[1] if player_id == ids[0] else ids[0]
-        match.turn_deadline = time() + settings.turn_seconds
-        if match.turns_left <= 0:
-            self.finish(room)
+        next_player = self._other_player(room, goal if goal else player_id)
+        self._end_turn(room, next_player)
         self.snapshot(room, "goal" if goal else "move")
         self._trim_snapshots(room)
         return {"duplicate": False, "goal": goal}
@@ -106,14 +132,9 @@ class GameService:
         match = room.match
         if not match or room.status != RoomStatus.PLAYING:
             return
-        ids = list(room.participants)
-        if match.turn_player_id not in ids:
+        if match.turn_player_id not in room.participants:
             return
-        match.turn_player_id = ids[1] if match.turn_player_id == ids[0] else ids[0]
-        match.turns_left -= 1
-        match.turn_deadline = time() + settings.turn_seconds
-        if match.turns_left <= 0:
-            self.finish(room)
+        self._end_turn(room, self._other_player(room, match.turn_player_id))
         self.snapshot(room, "turn_timeout")
         self._trim_snapshots(room)
 

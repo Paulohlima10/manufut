@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_name: str = "Manu Fut API"
     allowed_origins: str = "http://localhost:5173"
     turn_seconds: int = 30
+    match_turns: int = 40
     reconnect_seconds: int = 45
     max_force: float = 1.0
     supabase_url: str = ""

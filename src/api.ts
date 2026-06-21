@@ -1,11 +1,24 @@
 import type {Room,Team} from './types';
 
-export const shareOrigin=(import.meta.env.VITE_SHARE_HOST||window.location.origin).replace(/\/$/,'');
+const trimSlash=(url:string)=>url.replace(/\/$/,'');
+
+/** Em dev, VITE_SHARE_HOST permite convites pelo IP da LAN; em produção usa o domínio atual. */
+export const shareOrigin=trimSlash(
+  import.meta.env.DEV&&import.meta.env.VITE_SHARE_HOST
+    ? import.meta.env.VITE_SHARE_HOST
+    : window.location.origin
+);
 
 const apiBase=()=>{
-  if(import.meta.env.VITE_API_URL)return import.meta.env.VITE_API_URL.replace(/\/$/,'');
+  if(import.meta.env.VITE_API_URL)return trimSlash(import.meta.env.VITE_API_URL);
   if(import.meta.env.DEV)return '';
-  return `http://${new URL(shareOrigin).hostname}:8002`;
+  return window.location.origin;
+};
+
+const wsOrigin=(httpOrigin:string)=>{
+  const url=new URL(httpOrigin);
+  url.protocol=url.protocol==='https:'?'wss:':'ws:';
+  return url.origin;
 };
 
 export const inviteUrl=(code:string)=>`${shareOrigin}?room=${code}`;
@@ -17,4 +30,4 @@ export const joinRoom=(code:string,name:string,team:Team):Promise<Room>=>request
 export const getRoom=(code:string):Promise<Room>=>request(`/api/rooms/${code}`);
 export const saveTeam=(name:string,team:Team):Promise<{player_photos:string[]}>=>request('/api/team',{method:'PUT',body:JSON.stringify(body(name,team))});
 export const getHistory=():Promise<Room[]>=>request('/api/history');
-export const wsUrl=(code:string)=>{const base=apiBase();const wsBase=base?base.replace(/^http/,'ws'):`${location.protocol==='https:'?'wss':'ws'}://${location.host}`;return `${wsBase}/ws/${code}?token=${localStorage.getItem('token')}`};
+export const wsUrl=(code:string)=>{const base=apiBase();const wsBase=base?wsOrigin(base):`${location.protocol==='https:'?'wss':'ws'}://${location.host}`;return `${wsBase}/ws/${code}?token=${localStorage.getItem('token')}`};

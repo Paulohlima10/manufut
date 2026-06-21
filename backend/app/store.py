@@ -111,7 +111,7 @@ def _room_from_dict(data: dict) -> Room:
             turn_player_id=match_data["turn_player_id"],
             score=match_data["score"],
             sequence=match_data.get("sequence", 0),
-            turns_left=match_data.get("turns_left", 20),
+            turns_left=match_data.get("turns_left", settings.match_turns),
             started_at=match_data.get("started_at", time()),
             turn_deadline=match_data.get("turn_deadline", 0),
             winner_id=match_data.get("winner_id"),
@@ -127,6 +127,7 @@ def _room_from_dict(data: dict) -> Room:
         snapshots=data.get("snapshots", []),
         created_at=data.get("created_at", time()),
         last_activity=data.get("last_activity", time()),
+        paused_at=data.get("paused_at"),
     )
 
 

@@ -70,6 +70,7 @@ class Room:
     snapshots: list[dict[str, Any]] = field(default_factory=list)
     created_at: float = field(default_factory=time)
     last_activity: float = field(default_factory=time)
+    paused_at: float | None = None
 
     def public(self) -> dict[str, Any]:
         data = asdict(self)

@@ -26,7 +26,8 @@ export function GameField({room, userId, send}: {room: Room; userId: string; sen
   const music = useRef<HTMLAudioElement | null>(null);
   const lastCelebratedSeq = useRef(match.sequence);
   const prevScoreRef = useRef<Record<string, number>>({...match.score});
-  const expiredDeadlineRef = useRef(0);
+  const expiredDeadlineRef = useRef(-1);
+  const turnKeyRef = useRef(`${match.turn_player_id}:${match.turn_deadline}`);
   const [aim, setAim] = useState<Aim | null>(null);
   const [renderFrame, setRenderFrame] = useState(0);
   const [now, setNow] = useState(Date.now());
@@ -35,7 +36,7 @@ export function GameField({room, userId, send}: {room: Room; userId: string; sen
   const [goalFlash, setGoalFlash] = useState<string | null>(null);
   const ids = Object.keys(room.participants);
   const scoreKey = ids.map(id => `${id}:${match.score[id] ?? 0}`).join('|');
-  const myTurn = match.turn_player_id === userId;
+  const myTurn = match.turn_player_id === userId && room.status !== 'paused';
   const turnPlayer = room.participants[match.turn_player_id];
 
   useEffect(() => {
@@ -113,11 +114,17 @@ export function GameField({room, userId, send}: {room: Room; userId: string; sen
   }, []);
 
   useEffect(() => {
+    if (room.status === 'paused') return;
+    const turnKey = `${match.turn_player_id}:${match.turn_deadline}`;
+    if (turnKeyRef.current !== turnKey) {
+      turnKeyRef.current = turnKey;
+      expiredDeadlineRef.current = -1;
+    }
     const remaining = Math.max(0, Math.ceil((match.turn_deadline * 1000 - now) / 1000));
     if (remaining > 0 || match.turn_deadline === expiredDeadlineRef.current) return;
     expiredDeadlineRef.current = match.turn_deadline;
     send({type: 'expire_turn'});
-  }, [now, match.turn_deadline, send]);
+  }, [now, match.turn_player_id, match.turn_deadline, room.status, send]);
 
   const syncVisualFromServer = () => {
     for (const piece of match.pieces) visualPositions.current.set(piece.id, {...piece.position});
@@ -370,7 +377,7 @@ export function GameField({room, userId, send}: {room: Room; userId: string; sen
   return <main className="game">
     <div className={`scorebar ${goalFlash ? 'goal-flash' : ''}`}><div><i style={{background: room.participants[ids[0]].primary}}>{room.participants[ids[0]].name[0]}</i><b>{room.participants[ids[0]].team_name}</b></div><strong>{displayScore[ids[0]] ?? 0} <span>×</span> {displayScore[ids[1]] ?? 0}</strong><div><b>{room.participants[ids[1]].team_name}</b><i style={{background: room.participants[ids[1]].primary}}>{room.participants[ids[1]].name[0]}</i></div></div>
     {goalFlash && <div className="goal-banner" aria-live="assertive">GOOOOL!</div>}
-    <div className={`turn ${myTurn ? 'is-mine' : ''}`} style={{'--turn-color': turnPlayer.primary} as React.CSSProperties} aria-live="polite"><span><i style={{background: turnPlayer.primary}} />{myTurn ? `SUA VEZ, ${turnPlayer.name.toUpperCase()}!` : `VEZ DE ${turnPlayer.name.toUpperCase()}`}</span><b>{seconds}s</b><small>{turnPlayer.team_name} • {match.turns_left} jogadas restantes</small></div>
+    <div className={`turn ${myTurn ? 'is-mine' : ''}`} style={{'--turn-color': turnPlayer.primary} as React.CSSProperties} aria-live="polite"><span><i style={{background: turnPlayer.primary}} />{myTurn ? `SUA VEZ, ${turnPlayer.name.toUpperCase()}!` : `VEZ DE ${turnPlayer.name.toUpperCase()}`}</span><b>{seconds}s</b><small>{turnPlayer.team_name} • {match.turns_left} jogadas restantes na partida</small></div>
     <div className={`field-wrap ${myTurn ? 'can-play' : 'waiting-turn'} ${aim ? 'aiming' : ''}`}><canvas ref={canvas} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={event => finishDrag(event, true)} onPointerCancel={event => finishDrag(event, false)} /></div>
     <div className="shot-control"><div className="game-hint">{myTurn ? (aim ? 'Solte para chutar na direção da seta' : 'Puxe uma peça para trás e solte para chutar') : `Aguarde: ${turnPlayer.name} está jogando`}</div><div className={`power-meter ${aim ? 'visible' : ''}`} aria-label={`Força do chute: ${power}%`}><span>FORÇA</span><div><i style={{width: `${power}%`}} /></div><b>{power}%</b></div></div>
     <div className="game-tools"><button onClick={() => send({type: 'forfeit'})}><Flag />Desistir</button><button onClick={toggleSound} aria-pressed={soundEnabled}>{soundEnabled ? <Volume2 /> : <VolumeX />}{soundEnabled ? 'Som' : 'Som desligado'}</button></div>
