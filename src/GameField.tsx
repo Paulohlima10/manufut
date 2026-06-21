@@ -34,6 +34,7 @@ export function GameField({room, userId, send}: {room: Room; userId: string; sen
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [displayScore, setDisplayScore] = useState<Record<string, number>>(() => ({...match.score}));
   const [goalFlash, setGoalFlash] = useState<string | null>(null);
+  const [canvasSize, setCanvasSize] = useState({w: 0, h: 0});
   const ids = Object.keys(room.participants);
   const scoreKey = ids.map(id => `${id}:${match.score[id] ?? 0}`).join('|');
   const myTurn = match.turn_player_id === userId && room.status !== 'paused';
@@ -210,6 +211,17 @@ export function GameField({room, userId, send}: {room: Room; userId: string; sen
   useEffect(() => {
     const element = canvas.current;
     if (!element) return;
+    const observer = new ResizeObserver(entries => {
+      const {width, height} = entries[0].contentRect;
+      setCanvasSize(current => (current.w === width && current.h === height ? current : {w: width, h: height}));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const element = canvas.current;
+    if (!element || !canvasSize.w || !canvasSize.h) return;
     const context = element.getContext('2d')!;
     const dpr = devicePixelRatio || 1;
     const width = element.clientWidth;
@@ -312,7 +324,7 @@ export function GameField({room, userId, send}: {room: Room; userId: string; sen
       context.closePath();
       context.fill();
     }
-  }, [room, aim, myTurn, renderFrame, userId]);
+  }, [room, aim, myTurn, renderFrame, userId, canvasSize.w, canvasSize.h]);
 
   const fieldPoint = (event: React.PointerEvent): Point => {
     const rect = canvas.current!.getBoundingClientRect();
@@ -374,12 +386,22 @@ export function GameField({room, userId, send}: {room: Room; userId: string; sen
   const seconds = Math.max(0, Math.ceil((match.turn_deadline * 1000 - now) / 1000));
   const power = Math.round((aim?.force ?? 0) * 100);
 
+  const turnLabel = myTurn ? `SUA VEZ, ${turnPlayer.name.toUpperCase()}!` : `VEZ DE ${turnPlayer.name.toUpperCase()}`;
+
   return <main className="game">
-    <div className={`scorebar ${goalFlash ? 'goal-flash' : ''}`}><div><i style={{background: room.participants[ids[0]].primary}}>{room.participants[ids[0]].name[0]}</i><b>{room.participants[ids[0]].team_name}</b></div><strong>{displayScore[ids[0]] ?? 0} <span>×</span> {displayScore[ids[1]] ?? 0}</strong><div><b>{room.participants[ids[1]].team_name}</b><i style={{background: room.participants[ids[1]].primary}}>{room.participants[ids[1]].name[0]}</i></div></div>
+    <div className="game-head">
+      <div className={`scorebar ${goalFlash ? 'goal-flash' : ''}`}><div><i style={{background: room.participants[ids[0]].primary}}>{room.participants[ids[0]].name[0]}</i><b>{room.participants[ids[0]].team_name}</b></div><strong>{displayScore[ids[0]] ?? 0} <span>×</span> {displayScore[ids[1]] ?? 0}</strong><div><b>{room.participants[ids[1]].team_name}</b><i style={{background: room.participants[ids[1]].primary}}>{room.participants[ids[1]].name[0]}</i></div></div>
+      <div className={`turn ${myTurn ? 'is-mine' : ''}`} style={{'--turn-color': turnPlayer.primary} as React.CSSProperties} aria-live="polite"><span><i style={{background: turnPlayer.primary}} />{turnLabel}</span><b>{seconds}s</b><small>{turnPlayer.team_name} • {match.turns_left} jogadas restantes</small></div>
+    </div>
     {goalFlash && <div className="goal-banner" aria-live="assertive">GOOOOL!</div>}
-    <div className={`turn ${myTurn ? 'is-mine' : ''}`} style={{'--turn-color': turnPlayer.primary} as React.CSSProperties} aria-live="polite"><span><i style={{background: turnPlayer.primary}} />{myTurn ? `SUA VEZ, ${turnPlayer.name.toUpperCase()}!` : `VEZ DE ${turnPlayer.name.toUpperCase()}`}</span><b>{seconds}s</b><small>{turnPlayer.team_name} • {match.turns_left} jogadas restantes na partida</small></div>
-    <div className={`field-wrap ${myTurn ? 'can-play' : 'waiting-turn'} ${aim ? 'aiming' : ''}`}><canvas ref={canvas} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={event => finishDrag(event, true)} onPointerCancel={event => finishDrag(event, false)} /></div>
-    <div className="shot-control"><div className="game-hint">{myTurn ? (aim ? 'Solte para chutar na direção da seta' : 'Puxe uma peça para trás e solte para chutar') : `Aguarde: ${turnPlayer.name} está jogando`}</div><div className={`power-meter ${aim ? 'visible' : ''}`} aria-label={`Força do chute: ${power}%`}><span>FORÇA</span><div><i style={{width: `${power}%`}} /></div><b>{power}%</b></div></div>
-    <div className="game-tools"><button onClick={() => send({type: 'forfeit'})}><Flag />Desistir</button><button onClick={toggleSound} aria-pressed={soundEnabled}>{soundEnabled ? <Volume2 /> : <VolumeX />}{soundEnabled ? 'Som' : 'Som desligado'}</button></div>
+    <div className={`field-wrap ${myTurn ? 'can-play' : 'waiting-turn'} ${aim ? 'aiming' : ''}`}>
+      <div className="field-stage">
+        <canvas ref={canvas} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={event => finishDrag(event, true)} onPointerCancel={event => finishDrag(event, false)} />
+      </div>
+    </div>
+    <div className="game-foot">
+      <div className="shot-control"><div className="game-hint">{myTurn ? (aim ? 'Solte para chutar na direção da seta' : 'Puxe uma peça para trás e solte para chutar') : `Aguarde: ${turnPlayer.name} está jogando`}</div><div className={`power-meter ${aim ? 'visible' : ''}`} aria-label={`Força do chute: ${power}%`}><span>FORÇA</span><div><i style={{width: `${power}%`}} /></div><b>{power}%</b></div></div>
+      <div className="game-tools"><button onClick={() => send({type: 'forfeit'})}><Flag />Desistir</button><button onClick={toggleSound} aria-pressed={soundEnabled}>{soundEnabled ? <Volume2 /> : <VolumeX />}{soundEnabled ? 'Som' : 'Som desligado'}</button></div>
+    </div>
   </main>;
 }

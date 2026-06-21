@@ -1,15 +1,19 @@
 # Deploy: Render → Blueprint (recomendado).
-# Frontend: defina VITE_API_URL=https://manufut-api.onrender.com e redeploy.
+# Frontend: defina VITE_API_URL=https://manufut-1.onrender.com e redeploy.
 services:
   - type: web
     name: manufut-api
     runtime: python
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: bash render-start.sh
     healthCheckPath: /health
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.11"
       - key: ALLOWED_ORIGINS
         value: https://manufut.onrender.com,https://manufut.vercel.app
+      - key: ALLOWED_ORIGIN_REGEX
+        value: 'https://.*\.onrender\.com'
       - key: DEV_AUTH
         value: "true"
       - key: SUPABASE_URL

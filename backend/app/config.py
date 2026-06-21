@@ -9,6 +9,8 @@ ROOT_DIR = Path(__file__).resolve().parents[2]  # project root (.env)
 class Settings(BaseSettings):
     app_name: str = "Manu Fut API"
     allowed_origins: str = "http://localhost:5173"
+    # Front e API no Render usam subdomínios diferentes (ex.: manufut vs manufut-1).
+    allowed_origin_regex: str = r"https://.*\.onrender\.com"
     turn_seconds: int = 30
     match_turns: int = 40
     reconnect_seconds: int = 45
