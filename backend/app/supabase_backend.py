@@ -28,8 +28,11 @@ class SupabaseBackend:
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         headers = {**self.headers, **kwargs.pop("headers", {})}
-        async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.request(method, f"{self.url}{path}", headers=headers, **kwargs)
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.request(method, f"{self.url}{path}", headers=headers, **kwargs)
+        except httpx.RequestError as exc:
+            raise SupabaseError(f"Falha ao conectar no Supabase: {exc}") from exc
         if response.is_error:
             detail = response.text[:300]
             raise SupabaseError(f"Supabase {method} {path} retornou {response.status_code}: {detail}")

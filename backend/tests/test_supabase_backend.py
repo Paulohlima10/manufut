@@ -5,6 +5,7 @@ from datetime import datetime
 import httpx
 
 from backend.app.supabase_backend import SupabaseBackend
+from backend.app.supabase_backend import SupabaseError
 
 
 class RecordingBackend(SupabaseBackend):
@@ -88,3 +89,29 @@ def test_move_is_idempotent_by_room_player_and_sequence():
     assert table == "manufut_moves"
     assert row["sequence"] == 4
     assert conflict == "room_code,user_id,sequence"
+
+
+def test_request_error_is_wrapped_as_supabase_error(monkeypatch):
+    backend = SupabaseBackend("https://project.supabase.co", "secret")
+
+    class FailingAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def request(self, method, url, headers=None, **kwargs):
+            request = httpx.Request(method, url, headers=headers)
+            raise httpx.ConnectError("dns", request=request)
+
+    monkeypatch.setattr("backend.app.supabase_backend.httpx.AsyncClient", FailingAsyncClient)
+
+    try:
+        asyncio.run(backend._request("GET", "/rest/v1/test"))
+        assert False, "Esperava SupabaseError"
+    except SupabaseError as exc:
+        assert "Falha ao conectar no Supabase" in str(exc)

@@ -7,7 +7,9 @@ from dataclasses import asdict
 import json
 import logging
 from pathlib import Path
+import socket
 from time import time
+from urllib.parse import urlparse
 
 from fastapi import WebSocket
 
@@ -222,9 +224,32 @@ class SupabaseRoomStateStore(InMemoryRoomStateStore):
         return [_room_from_dict(data) for data in await self.backend.history(user_id)]
 
 
-supabase = None
-if settings.supabase_url and settings.supabase_service_role_key:
-    supabase = SupabaseBackend(settings.supabase_url, settings.supabase_service_role_key)
-    store: RoomStateStore = SupabaseRoomStateStore(supabase)
-else:
-    store = JsonRoomStateStore(settings.room_store_path)
+def _resolve_supabase_backend(config=settings) -> SupabaseBackend | None:
+    if not config.supabase_url or not config.supabase_service_role_key:
+        return None
+    parsed = urlparse(config.supabase_url)
+    hostname = parsed.hostname
+    if not hostname:
+        logger.warning("SUPABASE_URL inválida (%s); usando persistência local", config.supabase_url)
+        return None
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        socket.getaddrinfo(hostname, port)
+    except OSError:
+        logger.warning(
+            "Host do Supabase '%s' não resolve; usando persistência local em %s",
+            hostname,
+            config.room_store_path,
+        )
+        return None
+    return SupabaseBackend(config.supabase_url, config.supabase_service_role_key)
+
+
+def _build_store(config=settings) -> tuple[SupabaseBackend | None, RoomStateStore]:
+    backend = _resolve_supabase_backend(config)
+    if backend:
+        return backend, SupabaseRoomStateStore(backend)
+    return None, JsonRoomStateStore(config.room_store_path)
+
+
+supabase, store = _build_store()

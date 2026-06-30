@@ -1,10 +1,12 @@
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 from backend.app.game import game
 from backend.app.models import Participant, Room
 from backend.app.store import JsonRoomStateStore
 from backend.app.store import SupabaseRoomStateStore
+from backend.app.store import _build_store
 
 
 def test_room_survives_store_restart(tmp_path: Path):
@@ -52,3 +54,21 @@ def test_supabase_store_reuses_active_room_instance():
 
     assert first is second
     assert backend.reads == 1
+
+
+def test_invalid_supabase_host_falls_back_to_local_store(monkeypatch, tmp_path: Path):
+    config = SimpleNamespace(
+        supabase_url="https://invalid-project.supabase.co",
+        supabase_service_role_key="secret",
+        room_store_path=tmp_path / "rooms.json",
+    )
+
+    def fake_getaddrinfo(*_args, **_kwargs):
+        raise OSError("dns failure")
+
+    monkeypatch.setattr("backend.app.store.socket.getaddrinfo", fake_getaddrinfo)
+
+    backend, store = _build_store(config)
+
+    assert backend is None
+    assert isinstance(store, JsonRoomStateStore)
